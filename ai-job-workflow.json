@@ -1,0 +1,820 @@
+{
+  "name": "ai job",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "ee42a104-cff9-4fd6-a2c4-1359a9827ce2",
+        "formTitle": "Job Seeker Assistant ",
+        "formDescription": "Upload resume (PDF/DOCX), paste job description, and optionally provide GitHub/Portfolio URLs.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Resume File",
+              "fieldType": "file",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Job Description",
+              "fieldType": "textarea",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "GitHub Profile URL"
+            },
+            {
+              "fieldLabel": "Portfolio Website URL"
+            },
+            {
+              "fieldLabel": "Email Address",
+              "fieldType": "email",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Full Name",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5a7a0e98-595b-43a6-986f-b33870c1fbc7",
+      "type": "n8n-nodes-base.formTrigger",
+      "name": "Form Submit Trigger",
+      "position": [
+        7344,
+        2240
+      ],
+      "typeVersion": 2,
+      "webhookId": "ee42a104-cff9-4fd6-a2c4-1359a9827ce2"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "binaryPropertyName": "Resume File",
+        "options": {}
+      },
+      "id": "877e8c92-d116-4d85-ad7f-0bac0fda6950",
+      "type": "n8n-nodes-base.extractFromFile",
+      "name": "Extract Resume Text",
+      "position": [
+        7744,
+        1760
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const resumeText = $input.first().json.text || '';\nconst cleaned = resumeText.replace(/\\s+/g,' ').replace(/[^\\x00-\\x7F]/g,'').trim();\nreturn {json:{resume_text: cleaned, resume_word_count: cleaned.split(' ').filter(w=>w).length}};"
+      },
+      "id": "77b01410-0877-41de-914e-39f83fe45739",
+      "type": "n8n-nodes-base.function",
+      "name": "Clean Resume Text",
+      "position": [
+        7968,
+        1760
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const jd = $input.first().json.job_description || '';\nconst cleaned = jd.replace(/\\s+/g,' ').replace(/[^\\x00-\\x7F]/g,'').trim();\nreturn {json:{job_description: cleaned, jd_word_count: cleaned.split(' ').filter(w=>w).length}};"
+      },
+      "id": "4cab47d9-9261-408e-90d6-d2fb8695cb88",
+      "type": "n8n-nodes-base.function",
+      "name": "Clean Job Description",
+      "position": [
+        7968,
+        1952
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "url": "={{ $json['GitHub Profile URL'] ? ('https://api.github.com/users/' + $json['GitHub Profile URL'].split('/').pop()) : '' }}",
+        "options": {}
+      },
+      "id": "79212ca6-7f1d-4890-b7fe-77038bd6684f",
+      "type": "n8n-nodes-base.httpRequest",
+      "name": "Fetch GitHub Profile",
+      "position": [
+        7968,
+        2576
+      ],
+      "typeVersion": 4.1
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.repos_url || ('https://api.github.com/users/' + ($json['GitHub Profile URL'] ? $json['GitHub Profile URL'].split('/').pop() : '') + '/repos?sort=updated&per_page=10') }}",
+        "options": {}
+      },
+      "id": "4a0abecb-a3d3-4491-a238-3574edeea12d",
+      "type": "n8n-nodes-base.httpRequest",
+      "name": "Fetch GitHub Repos",
+      "position": [
+        8416,
+        2784
+      ],
+      "typeVersion": 4.1
+    },
+    {
+      "parameters": {
+        "functionCode": "const profile = $input[0].json || {};\nconst repos = Array.isArray($input[1].json) ? $input[1].json : ($input[1].json && $input[1].json[0] ? $input[1].json : []);\nconst languages = {};\nconst top = [];\nif(Array.isArray(repos)){\n  repos.forEach(r=>{ if(r.language) languages[r.language]=(languages[r.language]||0)+1; top.push({name:r.name, stars:r.stargazers_count||0, language:r.language||''});});\n}\nreturn {json:{github_username: profile.login||'', github_repos: profile.public_repos||0, github_followers: profile.followers||0, github_languages: Object.keys(languages), top_repos: top.slice(0,5), github_profile_url: profile.html_url||''}};"
+      },
+      "id": "7e82170a-7824-4bbe-9a96-dacf0e742bf2",
+      "type": "n8n-nodes-base.function",
+      "name": "Parse GitHub Data",
+      "position": [
+        7968,
+        2976
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "url": "={{ $json['Portfolio Website URL'] }}",
+        "options": {}
+      },
+      "id": "0e80bbd9-1c99-45ab-bcee-233835b4a7a8",
+      "type": "n8n-nodes-base.httpRequest",
+      "name": "Scrape Portfolio Website",
+      "position": [
+        7968,
+        2144
+      ],
+      "typeVersion": 4.1
+    },
+    {
+      "parameters": {
+        "functionCode": "const html = $input.first().json.body||''; const titleMatch = html.match(/<title>([^<]+)</); const title = titleMatch?titleMatch[1]:'Portfolio'; const descMatch = html.match(/<meta[^>]+name=[\"']description[\"'][^>]+content=[\"']([^\"']+)[\"']/i); const desc = descMatch?descMatch[1]:''; return {json:{portfolio_title: title, portfolio_description: desc, portfolio_url: $input.first().json.portfolio_url||''}};"
+      },
+      "id": "865d87d1-2940-4b60-8d1b-788004767d95",
+      "type": "n8n-nodes-base.function",
+      "name": "Parse Portfolio Data",
+      "position": [
+        7968,
+        3168
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "cf272cf8-ca58-46e0-a8ea-790e1df0fc2f",
+      "type": "n8n-nodes-base.merge",
+      "name": "Merge All Data",
+      "position": [
+        8288,
+        2208
+      ],
+      "typeVersion": 2.1
+    },
+    {
+      "parameters": {
+        "functionCode": "const resume = $input.first().json.resume_text||''; const jd = $input.first().json.job_description||''; const resumeWords = resume.toLowerCase().split(/\\W+/).filter(w=>w); const jdWords = jd.toLowerCase().split(/\\W+/).filter(w=>w);\nconst jdFreq = {};\njdWords.forEach(w=>{jdFreq[w]=(jdFreq[w]||0)+1;});\nconst matched=[]; const missing=[];\nconst uniqueJd = [...new Set(jdWords)];\nuniqueJd.forEach(w=>{ if(w && resumeWords.includes(w)) matched.push(w); else if(w) missing.push(w); });\n// simple scoring\nconst keywordScore = Math.round((matched.length/(uniqueJd.length||1))*100);\nconst formatScore = 80; // heuristic\nconst overall = Math.round((keywordScore*0.6 + formatScore*0.4));\nreturn {json:{ats_score: overall, keyword_match_score: keywordScore, format_quality_score: formatScore, overall_quality_score: overall, matched_keywords: matched.slice(0,50), missing_keywords: missing.slice(0,50), improvement_suggestions: ['Add missing keywords into skills/experience','Quantify achievements','Use clear section headings','Keep resume length under 2 pages'], section_feedback:{summary:'Add a concise 2-line summary',experience:'Use bullet points with metrics'}}};"
+      },
+      "id": "6ecd7780-5328-4ed9-86a1-b734605ab72d",
+      "type": "n8n-nodes-base.function",
+      "name": "Rule-based ATS & Keyword Matcher",
+      "position": [
+        8480,
+        2208
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const resume = $input.first().json.resume_text||''; const jd = $input.first().json.job_description||''; const githubLangs = $input.first().json.github_languages||[];\nconst resumeWords = resume.toLowerCase().split(/\\W+/).filter(w=>w);\nconst jdWords = jd.toLowerCase().split(/\\W+/).filter(w=>w);\nconst requiredSkills = [...new Set(jdWords.filter(w=>w.length>2))].slice(0,100);\nconst current = [...new Set(resumeWords)].filter(w=>w.length>2).slice(0,200);\nconst skillsGap = requiredSkills.filter(s=>!current.includes(s));\nconst recommended = skillsGap.slice(0,10);\nreturn {json:{current_skills: current.slice(0,50), required_skills: requiredSkills.slice(0,50), skills_gap: skillsGap.slice(0,50), recommended_skills: recommended, certifications: [], courses: [], timeline:{months:3,plan:'Start with top recommended skills, build 2 projects, apply to relevant roles'}, career_roadmap:['Month 1: Learn fundamentals','Month 2: Build project','Month 3: Apply & network']}};"
+      },
+      "id": "763cc758-3bea-4508-acb2-d5b932dab093",
+      "type": "n8n-nodes-base.function",
+      "name": "Rule-based Skills Gap Analysis",
+      "position": [
+        8688,
+        2304
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "functionCode": "const resume = $input.first().json.resume_text||''; const suggestions = [];\n// simple heuristics: find lines with 'responsible' and suggest action verbs\nconst lines = resume.split(/\\n/).slice(0,200);\nlines.forEach(l=>{ if(/responsible|responsibilities|worked on/i.test(l)) suggestions.push('Replace passive wording with action verbs and quantify results'); });\nif(suggestions.length===0) suggestions.push('Highlight measurable achievements and technologies used.');\nreturn {json:{suggestions:suggestions.slice(0,10), suggested_professional_summary:'Experienced professional with practical experience in relevant technologies. Tailor this summary to the job description by including core keywords.'}};"
+      },
+      "id": "527b9ff4-08ef-4d85-82ac-3c613cd28111",
+      "type": "n8n-nodes-base.function",
+      "name": "Suggest Resume Improvements (Heuristics)",
+      "position": [
+        8864,
+        2448
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "8851a217-a8f1-42f0-b629-e4cef456619a",
+      "type": "n8n-nodes-base.merge",
+      "name": "Merge Analysis Results",
+      "position": [
+        8832,
+        2048
+      ],
+      "typeVersion": 2.1
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://quickchart.io/chart",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chart",
+              "value": "={{ { type: 'bar', data: { labels: ['ATS Score', 'Keyword Match', 'Format Quality', 'Overall Quality'], datasets: [{ label: 'Scores', data: [$json.ats_score || 0, $json.keyword_match_score || 0, $json.format_quality_score || 0, $json.overall_quality_score || 0] }] }, options: { title: { display: true, text: 'Resume Scores' }, scales: { y: { beginAtZero: true, max: 100 } } } } }}"
+            },
+            {
+              "name": "width",
+              "value": "800"
+            },
+            {
+              "name": "height",
+              "value": "400"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a46176fd-d2db-4bd9-a1ee-6fde88ccbc12",
+      "type": "n8n-nodes-base.httpRequest",
+      "name": "QuickChart ATS Chart",
+      "position": [
+        9056,
+        1776
+      ],
+      "typeVersion": 4.1
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://quickchart.io/chart",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chart",
+              "value": "={{ { type: 'doughnut', data: { labels: ['Current Skills', 'Skills Gap'], datasets: [{ data: [($json.current_skills || []).length, ($json.skills_gap || []).length] }] }, options: { title: { display: true, text: 'Skills Gap' } } } }}"
+            },
+            {
+              "name": "width",
+              "value": "600"
+            },
+            {
+              "name": "height",
+              "value": "400"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9f9e8ad5-f08c-4ae5-af11-4c3700dab2b8",
+      "type": "n8n-nodes-base.httpRequest",
+      "name": "QuickChart Skills Chart",
+      "position": [
+        9056,
+        2128
+      ],
+      "typeVersion": 4.1
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "472935b6-a41d-401a-a314-89fe84d9e5a3",
+      "type": "n8n-nodes-base.merge",
+      "name": "Merge Chart URLs",
+      "position": [
+        9312,
+        2064
+      ],
+      "typeVersion": 2.1
+    },
+    {
+      "parameters": {
+        "functionCode": "const d = $input.first().json;\nconst ats = d; const skills = d; const resumeSummary = $input.first().json.suggested_professional_summary || '';\nconst html = `<!doctype html><html><head><meta charset='utf-8'><style>body{font-family:Arial;margin:30px}h1{color:#1976D2} .section{margin-top:20px;padding:15px;background:#fff;border-radius:8px}</style></head><body><h1>Job-Seeker Analysis Report (FREE)</h1><p>Candidate: ${$input.first().json.full_name||'N/A'}</p><div class='section'><h2>Scores</h2><p>ATS Score: ${$input.first().json.ats_score||0}</p><img src='${$input.first().json.chart_url||''}' alt='scores'/></div><div class='section'><h2>Skills</h2><p>Current: ${( $input.first().json.current_skills||[]).slice(0,20).join(', ')}</p><p>Gap: ${( $input.first().json.skills_gap||[]).slice(0,20).join(', ')}</p><img src='${$input.first().json.chart_skills_url||''}' alt='skills'/></div><div class='section'><h2>Suggested Summary</h2><p>${resumeSummary}</p></div></body></html>`;\nreturn {json:{html_content:html, full_name:$input.first().json.full_name||'N/A'}};"
+      },
+      "id": "242e9510-5041-4f66-a440-9bc53e69bd39",
+      "type": "n8n-nodes-base.function",
+      "name": "Build HTML Report",
+      "position": [
+        9536,
+        2112
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {},
+      "id": "74662b97-f6a5-4abe-989d-958b641d4646",
+      "type": "n8n-nodes-base.html",
+      "name": "Convert HTML to PDF",
+      "position": [
+        9760,
+        2160
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Form Submit Trigger').item.json['Email Address'] }}",
+        "subject": "Your Job Analysis Report",
+        "message": "={{ 'Hello ' + $('Form Submit Trigger').item.json['Full Name'] + ',\\n\\nYour free job analysis report is ready. See attached PDF.\\n\\nBest,\\nJob-Seeker Assistant' }}",
+        "options": {}
+      },
+      "id": "7a4d1e64-6887-432c-a060-d9d728573574",
+      "type": "n8n-nodes-base.gmail",
+      "name": "Send Report via Email",
+      "position": [
+        9600,
+        2416
+      ],
+      "typeVersion": 2.1,
+      "webhookId": "9755c6e8-026a-408f-adeb-ede728487487",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "o5cEYl0AAnUUT7Mp",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "databaseId": {
+          "__rl": true,
+          "value": "2be656d6-2416-807c-9ace-f65584c3b857",
+          "mode": "list",
+          "cachedResultName": "detailed ",
+          "cachedResultUrl": "https://www.notion.so/2be656d62416807c9acef65584c3b857"
+        },
+        "title": "=",
+        "simple": false,
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Name|title",
+              "title": "={{ $('Form Submit Trigger').item.json['Full Name'] || \"Unknown\" }}\n"
+            },
+            {
+              "key": "email|email",
+              "emailValue": "={{ $('Form Submit Trigger').item.json['Email Address'] }}\n"
+            },
+            {
+              "key": "Date Analyzed|date",
+              "date": "={{ new Date().toISOString().split(\"T\")[0] }}\n\n",
+              "timezone": "Asia/Kolkata"
+            },
+            {
+              "key": "GitHub URL|url",
+              "urlValue": "={{ $('Form Submit Trigger').item.json[\"GitHub Profile URL\"] || \"\" }}\n"
+            },
+            {
+              "key": "Overall Quality|number",
+              "numberValue": "={{ Number($('Rule-based ATS & Keyword Matcher').item.json['overall_quality_score'] || $json.overall_quality_score || 0) }}"
+            },
+            {
+              "key": "Skills Gap Count|number",
+              "numberValue": "={{ Array.isArray($('Rule-based Skills Gap Analysis').item.json['skills_gap']) ? $('Rule-based Skills Gap Analysis').item.json['skills_gap'].length : (($json.skills_gap || []).length || 0) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7a6980af-073b-4043-9184-48a03d4d3cfe",
+      "type": "n8n-nodes-base.notion",
+      "name": "Save Summary to Notion",
+      "position": [
+        9808,
+        2416
+      ],
+      "typeVersion": 2.2,
+      "credentials": {
+        "notionApi": {
+          "id": "JZlYaQfBNhY6OXqO",
+          "name": "Notion account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $('Form Submit Trigger').item.json['Portfolio Website URL'] }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c0511322-9adb-489e-a3be-824f76ad725e",
+      "name": "Check Portfolio URL Provided",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        7744,
+        2240
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "07554a93-65d1-4d1c-97c2-5f3fabd958aa",
+      "name": "Skip Portfolio Scraping",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        7968,
+        2336
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $('Form Submit Trigger').item.json['GitHub Profile URL'] }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "54a8ee6b-029b-4d49-9047-ec01e352a9c5",
+      "name": "Check GitHub URL Provided",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        7744,
+        2672
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "8cf508b3-a2ca-4340-868b-1cf2a97404df",
+      "name": "Skip GitHub Fetching",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        7968,
+        2784
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "3ee4be47-71ea-44d2-9a38-a456c9228de8",
+      "name": "Merge GitHub Profile and Repos",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        8400,
+        2576
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Form Submit Trigger": {
+      "main": [
+        [
+          {
+            "node": "Clean Job Description",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check Portfolio URL Provided",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check GitHub URL Provided",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Extract Resume Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Resume Text": {
+      "main": [
+        [
+          {
+            "node": "Clean Resume Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse GitHub Data": {
+      "main": [
+        [
+          {
+            "node": "Merge All Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Resume Text": {
+      "main": [
+        [
+          {
+            "node": "Merge All Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Clean Job Description": {
+      "main": [
+        [
+          {
+            "node": "Merge All Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Parse Portfolio Data": {
+      "main": [
+        [
+          {
+            "node": "Merge All Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge All Data": {
+      "main": [
+        [
+          {
+            "node": "Rule-based ATS & Keyword Matcher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rule-based ATS & Keyword Matcher": {
+      "main": [
+        [
+          {
+            "node": "Rule-based Skills Gap Analysis",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Analysis Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rule-based Skills Gap Analysis": {
+      "main": [
+        [
+          {
+            "node": "Suggest Resume Improvements (Heuristics)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Analysis Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Analysis Results": {
+      "main": [
+        [
+          {
+            "node": "QuickChart ATS Chart",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "QuickChart Skills Chart",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QuickChart ATS Chart": {
+      "main": [
+        [
+          {
+            "node": "Merge Chart URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QuickChart Skills Chart": {
+      "main": [
+        [
+          {
+            "node": "Merge Chart URLs",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Chart URLs": {
+      "main": [
+        [
+          {
+            "node": "Build HTML Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build HTML Report": {
+      "main": [
+        [
+          {
+            "node": "Convert HTML to PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert HTML to PDF": {
+      "main": [
+        [
+          {
+            "node": "Send Report via Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Portfolio URL Provided": {
+      "main": [
+        [
+          {
+            "node": "Scrape Portfolio Website",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip Portfolio Scraping",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check GitHub URL Provided": {
+      "main": [
+        [
+          {
+            "node": "Fetch GitHub Profile",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip GitHub Fetching",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Portfolio Scraping": {
+      "main": [
+        []
+      ]
+    },
+    "Fetch GitHub Profile": {
+      "main": [
+        [
+          {
+            "node": "Fetch GitHub Repos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge GitHub Profile and Repos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip GitHub Fetching": {
+      "main": [
+        [
+          {
+            "node": "Merge All Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch GitHub Repos": {
+      "main": [
+        [
+          {
+            "node": "Merge GitHub Profile and Repos",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Send Report via Email": {
+      "main": [
+        [
+          {
+            "node": "Save Summary to Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape Portfolio Website": {
+      "main": [
+        [
+          {
+            "node": "Merge All Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "94d20ca4-a5b5-4318-9dba-6bfbf11f2ce5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a0a5cbdee38f3fdd11eef4e6e191206a6fd3eb26fd76fa114a03f0d8d8c65cb5"
+  },
+  "id": "9nqcX9izzYSc4phZ",
+  "tags": []
+}
